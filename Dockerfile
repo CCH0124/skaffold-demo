@@ -12,7 +12,7 @@ FROM adoptopenjdk/openjdk11:jre-11.0.10_9-alpine
 
 WORKDIR /app
 
-COPY --from=MAVEN_BUILD /build/target/crud-0.0.1-SNAPSHOT.jar /app/
+COPY --from=MAVEN_BUILD /build/target/skaffold-0.0.1-SNAPSHOT.jar /app/
 
 
-ENTRYPOINT ["java", "-jar", "crud-0.0.1-SNAPSHOT.jar"]
+ENTRYPOINT ["java", "-jar", "skaffold-0.0.1-SNAPSHOT.jar"]
