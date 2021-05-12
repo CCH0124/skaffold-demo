@@ -18,6 +18,7 @@ deploy:
     manifests:
     - k8s/deploy.yaml
     - k8s/service.yaml
+    - k8s/ingress.yaml
     defaultNamespace: default
 profiles:
   - name: prod
