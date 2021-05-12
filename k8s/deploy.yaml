@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: hello-rest
+  name: hello-rest
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: hello-api
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: hello-api
+    spec:
+      containers:
+      - image: cch0124/hello-api
+        name: hello
+        ports:
+          - containerPort: 8080
+            protocol: TCP
+        resources: {}
+status: {}
