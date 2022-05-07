@@ -1,55 +1,17 @@
-apiVersion: skaffold/v2beta15
+apiVersion: skaffold/v2beta28
 kind: Config
 metadata:
-  name: hello-api
+  name: skaffold-demo
 build:
-  tagPolicy:
-    gitCommit:
-      variant: AbbrevCommitSha
   artifacts:
-  - image: cch0124/hello-api
-    context: .
-    docker:
-      dockerfile: Dockerfile
-  local:
-    push: true
+  - image: cch0124/spring-tutorial-api
+    jib: {}
 deploy:
   kubectl:
     manifests:
-    - k8s/deploy.yaml
-    - k8s/service.yaml
-    - k8s/ingress.yaml
-    defaultNamespace: default
-profiles:
-  - name: prod
-    activation:
-    - kubeContext: k3d-prod
-    build:
-      tagPolicy: 
-        sha256: {}
-      artifacts:
-        - image: cch0124/hello-api-prod
-          context: .
-          docker:
-            dockerfile: Dockerfile
-            cacheFrom:
-            - "maven:3.5.2-jdk-8-alpine"
-            - "adoptopenjdk/openjdk11:jre-11.0.10_9-alpine"
-    deploy:
-      kubeContext: k3d-prod
-  - name: stage
-    activation:
-    - kubeContext: k3d-stage
-    build:
-      artifacts:
-        - image: cch0124/hello-api-stage
-          custom:
-            buildCommand: docker build -t cch0124/hello-api-stage:latest . 
-            dependencies:
-              paths:
-                - "src/**/*"
-                - "pom.xml"
-              ignore:
-                - k8s/**/*.yaml
-      local:
-        push: false
+    - k8s/deploy-native/tutorial/application-properties-cm.yaml
+    - k8s/deploy-native/tutorial/deployment.yaml
+    - k8s/deploy-native/tutorial/globalenv-cm.yaml
+    - k8s/deploy-native/tutorial/globalenv-secret.yaml
+    - k8s/deploy-native/tutorial/ingress.yaml
+    - k8s/deploy-native/tutorial/service.yaml
