@@ -1,5 +1,18 @@
 >Jib can create an image *without a Docker daemon*. This means that you don't have to install and configure Docker and create or maintain a Dockerfile.
 
+
+
+[docker build and Jib build flow](https://www.linkedin.com/pulse/docker-image-build-vs-jib-eran-shaham/)
+
+![](https://media-exp1.licdn.com/dms/image/C4D12AQHfTG7HCQdNjg/article-inline_image-shrink_1000_1488/0/1582204715176?e=1657152000&v=beta&t=75AtP83X2m0u13zSZJYuTOI-fSzm2oy1TRsETkr35wU) 
+
+[jib 使用](https://github.com/GoogleContainerTools/jib/blob/master/jib-maven-plugin/README.md)
+
+在 local 端可以如下執行
+```bash
+mvn compile jib:build -Djib.to.auth.username=${USERNAME} -Djib.to.auth.password=${PASSWORD} -Dimage=registry.hub.docker.com/cch0124/spring-tutorial-api
+```
+## API Spec
 |Methods	|Urls	|Actions|
 |---|---|---|
 |POST	|/api/tutorials	|create new Tutorial|
