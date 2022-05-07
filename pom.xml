@@ -59,6 +59,10 @@
 					</from>
 					<to>
 						<image>${image.path}</image>
+						<tags>
+							<!-- <tag>${git.commit.id}</tag> -->
+							<tag>latest</tag>
+						</tags>
 					</to>
 				</configuration>
 			</plugin>
