@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: globalenv-cm
+  labels:
+    app: tutorial-api
+data:
+  DB_URL: "postgres.default.svc.cluster.local:5432"
+
