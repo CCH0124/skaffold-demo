@@ -3,9 +3,19 @@ kind: Config
 metadata:
   name: skaffold-demo
 build:
+  tagPolicy:
+    sha256: {}
+    # gitCommit:
+    #   variant: AbbrevCommitSha
+    #   ignoreChanges: false
   artifacts:
   - image: cch0124/spring-tutorial-api
-    jib: {}
+    custom:
+      buildCommand: mvn compile jib:build -Djib.to.auth.username=$USERNAME -Djib.to.auth.password=$PASSWORD -Dimage=$IMAGE
+      dependencies:
+        paths:
+        - src/**
+    # jib: {}
 deploy:
   kubectl:
     manifests:
@@ -15,3 +25,9 @@ deploy:
     - k8s/deploy-native/tutorial/globalenv-secret.yaml
     - k8s/deploy-native/tutorial/ingress.yaml
     - k8s/deploy-native/tutorial/service.yaml
+profiles:
+- name: dev-cluster
+  activation:
+  - env: ENV=dev
+  - kubeContext: kubernetes-admin@kubernetes
+    command: dev
