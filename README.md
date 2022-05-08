@@ -12,7 +12,6 @@
 ```bash
 mvn compile jib:build -Djib.to.auth.username=${USERNAME} -Djib.to.auth.password=${PASSWORD} -Dimage=registry.hub.docker.com/cch0124/spring-tutorial-api
 ```
-
 ## Spring Best Practices
 1. Wait for container lifecycle processes to finish
 
@@ -220,4 +219,79 @@ test=# select * from tutorials ;
  id | description | published | title
 ----+-------------+-----------+-------
 (0 rows)
+```
+## Skaffold Architecture
+
+## [Kube-context Activation](https://skaffold.dev/docs/environment/kube-context/) And [Profiles](https://skaffold.dev/docs/environment/profiles/)
+當要與 Kubernetes 集群交互時，需要配置 `kube-context`。透過 `kube-context` 選擇 Kubernetes 集群、Kubernetes 用戶和預設 namespace。預設下，Skaffold 使用 `kube-config` 文件中的當前 `kube-context`。
+
+本實驗環境是 WSL2 存取虛擬機中的集群。WSL2 安裝 `kubectl`，並依照以下方式做即可操控遠方群集，但通常不應該使用 kubernetes 的 admin 來做。
+
+```bash
+$ vagrant ssh master-skaffold
+# 複製 .kube/config 至 WSL 的 .kube 下
+$ KUBECONFIG=skaffold:~/.kube/skaffold kubectl config view # 這邊是貼至 .kube/skaffold 檔案中
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority-data: DATA+OMITTED
+    server: https://192.168.56.30:6443
+  name: kubernetes
+contexts:
+- context:
+    cluster: kubernetes
+    user: kubernetes-admin
+  name: kubernetes-admin@kubernetes
+current-context: kubernetes-admin@kubernetes
+kind: Config
+preferences: {}
+users:
+- name: kubernetes-admin
+  user:
+    client-certificate-data: REDACTED
+    client-key-data: REDACTED
+$ KUBECONFIG=~/.kube/skaffold:~/.kube/config kubectl config view --flatten > config # 透過 --flatten 可顯示完整資訊，並將其合併至 config 檔案
+$ kubectl config  get-contexts # 會看到我新增的群集
+CURRENT   NAME                          CLUSTER      AUTHINFO           NAMESPACE
+*         kubernetes-admin@kubernetes   kubernetes   kubernetes-admin
+$ kubectl get node -o wide # WSL 就可以控制遠端(VM)的群集了
+NAME              STATUS   ROLES                  AGE   VERSION   INTERNAL-IP     EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION      CONTAINER-RUNTIME
+master-skaffold   Ready    control-plane,master   14h   v1.23.0   192.168.56.30   <none>        Ubuntu 20.04.4 LTS   5.4.0-107-generic   cri-o://1.23.2
+node1-skaffold    Ready    <none>                 14h   v1.23.0   192.168.56.31   <none>        Ubuntu 20.04.4 LTS   5.4.0-107-generic   cri-o://1.23.2
+node2-skaffold    Ready    <none>                 14h   v1.23.0   192.168.56.32   <none>        Ubuntu 20.04.4 LTS   5.4.0-107-generic   cri-o://1.23.2
+$ kubectl config  get-contexts -o name # 獲取當前 context 名字，這將運用在 skaffold 的 kubeContext 字段
+kubernetes-admin@kubernetes
+```
+
+為了讓在本地開發的專案能夠佈署在遠端集群上我們定義了以下資訊，當然這段可以用 `skaffold dev --kube-context <myrepo>` 取代。下面配置目的是為了，設置部署到不同的 Kubernetes 上下文中。
+
+```yaml
+...
+profiles:
+- name: dev-cluster
+  activation:
+  - env: ENV=dev # 當此變數存在則觸發此 profile
+  - kubeContext: kubernetes-admin@kubernetes
+    command: dev
+```
+
+對於 Skaffold 配置檔來說，`kube-context` 有雙重作用
+- Skaffold 配置檔可以由字段 `profiles.activation.kubeContext` 中 `kube-context` 自動存取
+- Skaffold 配置檔可能由字段 `profiles.deploy.kubeContext` 中 `kube-context` 存取
+  
+>無法更改正在運行的 skaffold dev 的 kube-context。要更改，需要重新運行 skaffold dev
+
+Skaffold 配置檔可為不同的 Kubernetes 上下文定義 build、test 和 deploy。不同的上下文通常不同環境，例如 prod 或 dev。為此須透過 `profiles` 字段進行定義，其有六個部分
+- name: profile 名稱
+- build
+- test
+- deploy
+- patches
+- activation
+
+profiles 中定義的內容是可以覆蓋外部定義的內容。
+
+當定義好之後我們可以如下運行
+```bash
+$ skaffold dev -p dev-cluster
 ```
