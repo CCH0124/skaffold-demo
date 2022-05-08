@@ -73,9 +73,9 @@ spec:
         - name: config-volume
           mountPath: /workspace/config
           readOnly: true
+        imagePullPolicy: Always
+      restartPolicy: Always
       volumes:
         - name: config-volume
           configMap:
             name: tutorial-properties-cm
-      restartPolicy: Always
-      imagePullPolicy: Always

@@ -16,5 +16,5 @@ spec:
             backend:
               service:
                 name: tutorial-api-service
-              port:
-                number: 8080
+                port:
+                  number: 8080
