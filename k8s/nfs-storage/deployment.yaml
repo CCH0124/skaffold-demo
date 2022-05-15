@@ -1,0 +1,36 @@
+# nfs-client-provisioner 是 Kubernetes 簡易 NFS 外部 provisioner，本身不提供 NFS，要現有的 NFS 服務器提供存儲
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: nfs-client-provisioner
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # terminates all the pods and replaces them with the new version.
+  selector:
+    matchLabels:
+      app: nfs-client-provisioner
+  template:
+    metadata:
+      labels:
+        app: nfs-client-provisioner
+    spec:
+      serviceAccountName: nfs-client-provisioner
+      containers:
+        - name: nfs-client-provisioner
+          image: quay.io/external_storage/nfs-client-provisioner:latest
+          volumeMounts:
+            - name: nfs-client-root
+              mountPath: /persistentvolumes
+          env:
+            - name: PROVISIONER_NAME
+              value: cch.com/nfs
+            - name: NFS_SERVER
+              value: 172.18.173.61
+            - name: NFS_PATH
+              value: /data
+      volumes:
+        - name: nfs-client-root
+          nfs:
+            server: 172.18.173.61
+            path: /data

@@ -220,6 +220,18 @@ test=# select * from tutorials ;
 ----+-------------+-----------+-------
 (0 rows)
 ```
+
+## PostgreSQL on K8s
+1. NFS Server
+從 WSL 安裝，請勿在 `/mnt/{c、d}` 進行掛載，因為硬碟格式非 ext4，每個節點安裝 `apt-get install nfs-common`
+```bash=
+docker run --name nfs-server -itd --privileged --restart unless-stopped -e READ_ONLY -e SHARED_DIRECTORY=/data -v $PWD/dynamic:/data -p 2049:2049 itsthenetwork/nfs-server-alpine:12
+```
+
+1. 
+```bash=
+
+```
 ## Skaffold Architecture
 
 ## [Kube-context Activation](https://skaffold.dev/docs/environment/kube-context/) And [Profiles](https://skaffold.dev/docs/environment/profiles/)

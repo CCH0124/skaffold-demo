@@ -1,0 +1,13 @@
+# https://kubernetes.io/docs/concepts/storage/storage-classes/#nfs
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: managed-nfs-storage
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true" # 設定為預設的 storageclass
+provisioner: cch.com/nfs
+parameters:
+  archiveOnDelete: "false" # false 刪除 PVC 不會保留數據；true 則保留數據
+  server: 172.18.173.61
+  path: /data
+  readOnly: "true"
