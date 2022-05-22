@@ -1,0 +1,30 @@
+$nfsConfig = <<-SCRIPT
+    sudo apt-get update
+    sudo apt-get install nfs-kernel-server -y
+    sudo mkdir -p /mnt/nfs_share
+    sudo chown -R nobody:nogroup /mnt/nfs_share/
+    sudo chmod 777 /mnt/nfs_share/
+    # /mnt/nfs_share  client_IP_1 (re,sync,no_subtree_check) # single client
+# cat >>/etc/exports<<EOF
+#     /mnt/nfs_share  192.168.56.0/24(rw,sync,no_subtree_check,no_root_squash)
+# EOF
+    echo "/mnt/nfs_share  192.168.56.0/24(rw,sync,no_subtree_check,no_root_squash)" | sudo tee -a /etc/exports
+    sudo exportfs -rav
+    sudo systemctl restart nfs-kernel-server
+    sudo systemctl enable nfs-server
+SCRIPT
+Vagrant.configure("2") do |cf|
+    cf.vm.define "nfs-server" do |nfs|
+      nfs.vm.box = "bento/ubuntu-20.04"
+      nfs.vm.hostname = "nfs-server"
+      nfs.vm.network "private_network", ip: "192.168.56.35"
+      nfs.vm.network :forwarded_port, guest: 22, host: 2213, id: "ssh", protocol: "tcp"
+      nfs.vm.provider "virtualbox" do |n|
+        n.name = "nfs-server"
+        n.customize ['modifyvm', :id, '--nicpromisc2', 'allow-all']
+        n.customize ["modifyvm", :id, "--memory", '2048']
+        n.customize ["modifyvm", :id, "--cpus", '2']
+      end
+      nfs.vm.provision "shell", privileged: false, inline: $nfsConfig
+    end
+  end
