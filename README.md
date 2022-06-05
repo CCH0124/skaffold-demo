@@ -228,10 +228,18 @@ test=# select * from tutorials ;
 docker run --name nfs-server -itd --privileged --restart unless-stopped -e READ_ONLY -e SHARED_DIRECTORY=/data -v $PWD/dynamic:/data -p 2049:2049 itsthenetwork/nfs-server-alpine:12
 ```
 
-1. 
-```bash=
+>第一個方法未成功
 
+2. 建立一台 nfs-server 虛擬機
+或是建立一台 nfs-server，按照此檔案的 [script](infra/nfs/Vagrantfile) 運行即可。並在每個節點安裝
+```bash
+sudo apt-get install nfs-common -y
 ```
+
+最後 `apply` [檔案](/k8s/nfs-storage)，`api-server` 需添加 `- --feature-gates=RemoveSelfLink=false` 參數，才可運行，可參考此[討論](https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner/issues/25)。
+
+postgresql 使用 `kubegres` 方案，進行佈署，其相關資訊可參考此[鏈結](https://www.kubegres.io/doc/getting-started.html)，相關配置[yaml](/k8s/pg)
+
 ## Skaffold Architecture
 
 ## [Kube-context Activation](https://skaffold.dev/docs/environment/kube-context/) And [Profiles](https://skaffold.dev/docs/environment/profiles/)
@@ -306,4 +314,10 @@ profiles 中定義的內容是可以覆蓋外部定義的內容。
 當定義好之後我們可以如下運行
 ```bash
 $ skaffold dev -p dev-cluster
+```
+
+接著透過起一個有 `curl` 指令的容器，針對該 API 服務的 `service` 資源進行存取，並得到以下結果
+```bash
+ curl http://tutorial-api-service.default.svc.cluster.local:8080/hello
+Hello Skaffold! From host: tutorial-api-85446658dd-8pvzr/10.0.2.197
 ```
