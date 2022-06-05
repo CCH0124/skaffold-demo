@@ -1,0 +1,80 @@
+apiVersion: kubegres.reactive-tech.io/v1
+kind: Kubegres
+metadata:
+  name: mypostgres
+  namespace: default
+spec:
+  replicas: 2
+  image: postgres:14.1
+  port: 5432
+  database:
+    size: 200Mi
+    storageClassName: managed-nfs-storage
+    volumeMount: /var/lib/postgresql/data
+  customConfig: pg-conf
+  failover:
+      isDisabled: true
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    fsGroup: 999
+  resources:
+    limits:
+      memory: "1Gi"
+      cpu: "1"
+    requests:
+      memory: 500Mi
+      cpu: "1"
+  probe:
+    livenessProbe:
+      exec:
+        command:
+          - sh
+          - -c
+          - exec pg_isready -U postgres -h $POD_IP
+      failureThreshold: 10
+      initialDelaySeconds: 60
+      periodSeconds: 20
+      successThreshold: 1
+      timeoutSeconds: 15
+    readinessProbe:
+      exec:
+        command:
+          - sh
+          - -c
+          - exec pg_isready -U postgres -h $POD_IP
+      failureThreshold: 3
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      successThreshold: 1
+      timeoutSeconds: 3
+  scheduler:
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - mypostgres
+              topologyKey: "kubernetes.io/hostname"
+  env:
+    - name: POSTGRES_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: pg-secret
+          key: superUserPassword
+    - name: POSTGRES_REPLICATION_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: pg-secret
+          key: replicationUserPassword
+    # not use secrets
+    - name: POSTGRES_MY_DB_PASSWORD 
+      valueFrom:
+        secretKeyRef:
+          name: pg-secret
+          key: pgDbPwd

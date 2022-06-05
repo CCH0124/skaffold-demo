@@ -1,0 +1,125 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pg-conf
+  namespace: default
+data:
+  primary_init_script.sh: |
+    #!/bin/bash
+    set -e
+
+    # This script assumes that the env-var $POSTGRES_MY_DB_PASSWORD contains the password of the custom user to create.
+    # You can add any env-var in your Kubegres resource config YAML.
+
+    dt=$(date '+%d/%m/%Y %H:%M:%S');
+    echo "$dt - Running init script the 1st time Primary PostgreSql container is created...";
+
+    customDatabaseName="test"
+    customUserName="dev"
+
+    echo "$dt - Running: psql -v ON_ERROR_STOP=1 --username $POSTGRES_USER --dbname $POSTGRES_DB ...";
+
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+    CREATE DATABASE $customDatabaseName;
+    CREATE USER $customUserName WITH PASSWORD '$POSTGRES_MY_DB_PASSWORD' LOGIN;
+    GRANT ALL PRIVILEGES ON DATABASE "$customDatabaseName" to $customUserName;
+    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO $customUserName;
+    \c $customDatabaseName
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    EOSQL
+
+    echo "$dt - Init script is completed";
+  postgres.conf: |
+
+    # Replication configs
+    listen_addresses = '*'
+    max_wal_senders = 10
+    # wal_keep_segments = 48 #in Mb
+
+    # Logging
+    log_destination = 'stderr,csvlog'
+    logging_collector = on
+    log_directory = 'pg_log'
+    log_filename= 'postgresql-%Y-%m-%d_%H%M%S.log'
+
+    max_connections = 100
+    shared_buffers = 128MB
+    effective_cache_size = 768MB
+    maintenance_work_mem = 64MB
+    checkpoint_completion_target = 0.9
+    wal_buffers = 7864kB
+    default_statistics_target = 100
+    random_page_cost = 1.1
+    effective_io_concurrency = 200
+    work_mem = 1310kB
+    min_wal_size = 1GB
+    max_wal_size = 4GB
+  pg_hba.conf: |
+    # TYPE  DATABASE        USER            ADDRESS                 METHOD
+    # Replication connections by a user with the replication privilege
+    host    replication     replication     all                     scram-sha-256
+    # As long as it is authenticated, all connections allowed except from "0.0.0.0/0"
+    local   all             all                                     trust
+    host    all             all             127.0.0.1/32            trust
+    host    all             all             all                     scram-sha-256
+    host    all             all             0.0.0.0/0               reject
+  primary_create_replication_role.sh: |
+    #!/bin/bash
+    set -e
+    dt=$(date '+%d/%m/%Y %H:%M:%S');
+    echo "$dt - Creating replication role...";
+    echo "$dt - Running: psql -v ON_ERROR_STOP=1 --username $POSTGRES_USER --dbname $POSTGRES_DB ... CREATE ROLE replication WITH REPLICATION PASSWORD ... GRANT EXECUTE ON FUNCTION pg_promote TO replication;";
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+    CREATE ROLE replication WITH REPLICATION PASSWORD '$POSTGRES_REPLICATION_PASSWORD' LOGIN;
+    GRANT EXECUTE ON FUNCTION pg_promote TO replication;
+    EOSQL
+    echo "$dt - Replication role created";
+  # This script replicates data from the Primary PostgreSql to the Replica database.
+  # It is executed once, the 1st time a Replica PostgreSql container is created.
+  # It is run in Replica containers.
+  #
+  # If you modify this script, there is a risk of breaking the operator.
+  #
+  # This script will be located in the folder "/tmp"
+  #
+  copy_primary_data_to_replica.sh: |
+    #!/bin/bash
+    set -e
+    dt=$(date '+%d/%m/%Y %H:%M:%S');
+    echo "$dt - Attempting to copy Primary DB to Replica DB...";
+    if [ -z "$(ls -A $PGDATA)" ]; then
+        echo "$dt - Copying Primary DB to Replica DB folder: $PGDATA";
+        echo "$dt - Running: pg_basebackup -R -h $PRIMARY_HOST_NAME -D $PGDATA -P -U replication;";
+        pg_basebackup -R -h $PRIMARY_HOST_NAME -D $PGDATA -P -U replication;
+        if [ $UID == 0 ]
+        then
+        chown -R postgres:postgres $PGDATA;
+        fi
+        echo "$dt - Copy completed";
+    else
+        echo "$dt - Skipping copy from Primary DB because Replica DB already exists";
+    fi
+  # This script promotes a Replica to a Primary by creating a trigger-file signaling PostgreSql to start the promotion process.
+  # It is executed once, when a Replica is set to become a Primary.
+  # It is run in a selected Replica container by the operator.
+  #
+  # If you modify this script, there is a risk of breaking the operator.
+  #
+  # This script will be located in the folder "/tmp"
+  promote_replica_to_primary.sh: |
+    #!/bin/bash
+    set -e
+    dt=$(date '+%d/%m/%Y %H:%M:%S');
+    echo "$dt - Attempting to promote a Replica PostgreSql to Primary...";
+    standbyFilePath="$PGDATA/standby.signal"
+    if [ ! -f "$standbyFilePath" ]; then
+      echo "$dt - Skipping as this PostgreSql is already a Primary since the file '$standbyFilePath' does not exist."
+      exit 0
+    fi
+    promotionTriggerFilePath="$PGDATA/promote_replica_to_primary.log"
+    if [ -f "$promotionTriggerFilePath" ]; then
+      echo "$dt - Skipping as the promotion trigger file '$promotionTriggerFilePath' already exists"
+      exit 0
+    fi
+    echo "$dt - Promoting by creating the promotion trigger file: '$promotionTriggerFilePath'"
+    touch $promotionTriggerFilePath
