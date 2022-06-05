@@ -64,6 +64,9 @@
 							<tag>latest</tag>
 						</tags>
 					</to>
+					<container>
+						<creationTime>USE_CURRENT_TIMESTAMP</creationTime>
+					</container>
 				</configuration>
 			</plugin>
 
