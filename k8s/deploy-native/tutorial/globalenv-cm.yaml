@@ -5,5 +5,5 @@ metadata:
   labels:
     app: tutorial-api
 data:
-  DB_URL: "postgres.default.svc.cluster.local:5432"
+  DB_URL: "mypostgres.default.svc.cluster.local:5432"
 

@@ -6,7 +6,7 @@ metadata:
     app: tutorial-api
     svc: tutorial-api-service
 spec:
-  replicas: 3
+  replicas: 1
   strategy:
     rollingUpdate:
       maxSurge: 1
@@ -20,9 +20,15 @@ spec:
       labels:
         app: tutorial-api
     spec:
+      securityContext:
+        runAsUser: 1000
+        runAsNonRoot: true
       containers:
       - image: cch0124/spring-tutorial-api:latest
         name: tutorial-api
+        securityContext:
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
         resources:
           requests:
             memory: '256Mi'
@@ -50,6 +56,8 @@ spec:
             exec:
               command: ["sh", "-c", "sleep 10"]
         env:
+        - name: JAVA_TOOL_OPTIONS
+          value: "-Dspring.config.location=/opt/config/application.properties"
         - name: DB_URL
           valueFrom:
             configMapKeyRef:
@@ -70,12 +78,15 @@ spec:
           protocol: TCP
           name: spring-api
         volumeMounts:
-        - name: config-volume
-          mountPath: /workspace/config
+        - name: application-config
+          mountPath: /opt/config
           readOnly: true
         imagePullPolicy: Always
       restartPolicy: Always
       volumes:
-        - name: config-volume
+        - name: application-config
           configMap:
             name: tutorial-properties-cm
+            items:
+            - key: application.properties 
+              path: application.properties
