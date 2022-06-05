@@ -8,6 +8,6 @@ metadata:
 provisioner: cch.com/nfs
 parameters:
   archiveOnDelete: "false" # false 刪除 PVC 不會保留數據；true 則保留數據
-  server: 172.18.173.61
-  path: /data
+  server: 192.168.133.135
+  path: /mnt/nfs_share
   readOnly: "true"

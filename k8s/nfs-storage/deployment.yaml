@@ -17,20 +17,20 @@ spec:
     spec:
       serviceAccountName: nfs-client-provisioner
       containers:
-        - name: nfs-client-provisioner
-          image: quay.io/external_storage/nfs-client-provisioner:latest
-          volumeMounts:
-            - name: nfs-client-root
-              mountPath: /persistentvolumes
-          env:
-            - name: PROVISIONER_NAME
-              value: cch.com/nfs
-            - name: NFS_SERVER
-              value: 172.18.173.61
-            - name: NFS_PATH
-              value: /data
-      volumes:
+      - name: nfs-client-provisioner
+        image: quay.io/external_storage/nfs-client-provisioner:latest
+        volumeMounts:
         - name: nfs-client-root
-          nfs:
-            server: 172.18.173.61
-            path: /data
+          mountPath: /persistentvolumes
+        env:
+        - name: PROVISIONER_NAME
+          value: cch.com/nfs
+        - name: NFS_SERVER
+          value: 192.168.133.135
+        - name: NFS_PATH
+          value: /mnt/nfs_share
+      volumes:
+      - name: nfs-client-root
+        nfs:
+          server: 192.168.133.135
+          path: /mnt/nfs_share
