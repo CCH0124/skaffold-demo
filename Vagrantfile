@@ -5,23 +5,23 @@ servers = [
     {
         :name => "master-skaffold",
         :type => "master",
-        :box => "generic/ubuntu2004",
+        :box => "bento/ubuntu-20.04",
         :eth1 => "192.168.56.30",
         :mem => "2048",
-        :cpu => "2"
+        :cpu => "3"
     },
     {
         :name => "node1-skaffold",
         :type => "node",
-        :box => "generic/ubuntu2004",
+        :box => "bento/ubuntu-20.04",
         :eth1 => "192.168.56.31",
-        :mem => "3072",
-        :cpu => "3"
+        :mem => "2048",
+        :cpu => "2"
     },
     {
         :name => "node2-skaffold",
         :type => "node",
-        :box => "generic/ubuntu2004",
+        :box => "bento/ubuntu-20.04",
         :eth1 => "192.168.56.32",
         :mem => "2048",
         :cpu => "2"
@@ -36,6 +36,7 @@ $configureBox = <<-SCRIPT
 
     #Disable swap
     sudo swapoff -a && sudo sysctl -w vm.swappiness=0
+    echo "vm.swappiness=0" | sudo tee -a /etc/sysctl.conf
     sudo sed '/vagrant--vg-swap/d' -i /etc/fstab
     # Create the .conf file to load the modules at bootup
     cat <<EOF | sudo tee /etc/modules-load.d/crio.conf
