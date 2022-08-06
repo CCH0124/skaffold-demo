@@ -236,7 +236,25 @@ docker run --name nfs-server -itd --privileged --restart unless-stopped -e READ_
 sudo apt-get install nfs-common -y
 ```
 
-最後 `apply` [檔案](/k8s/nfs-storage)，`api-server` 需添加 `- --feature-gates=RemoveSelfLink=false` 參數，才可運行，可參考此[討論](https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner/issues/25)。
+最後 `apply` [檔案](/k8s/nfs-storage)，`api-server` 需添加 `- --feature-gates=RemoveSelfLink=false` 參數，才可運行，可參考此[討論](https://github.com/kubernetes-sigs/nfs-subdir-external-provisioner/issues/25)，kubernetes 1.24 版後不適用此安裝方式。
+
+
+3. 推薦 NFS 安裝
+[artifacthub.io nfs-subdir-external-provisioner](https://artifacthub.io/packages/helm/nfs-subdir-external-provisioner/nfs-subdir-external-provisioner)
+```bash
+helm repo add nfs-subdir-external-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/
+helm install nfs-subdir-external-provisioner nfs-subdir-external-provisioner/nfs-subdir-external-provisioner \
+    --set nfs.server=192.168.133.135 \
+    --set nfs.path=/mnt/nfs_share \
+    --set storageClass.name=managed-nfs-storage \
+    --set storageClass.provisionerName=cch.com/nfs \
+    --set storageClass.archiveOnDelete=false \
+    --version 4.0.15 \
+    -n nfs-provisioner \
+    --create-namespace
+```
+
+
 
 postgresql 使用 `kubegres` 方案，進行佈署，其相關資訊可參考此[鏈結](https://www.kubegres.io/doc/getting-started.html)，相關配置[yaml](/k8s/pg)
 
@@ -318,6 +336,119 @@ $ skaffold dev -p dev-cluster
 
 接著透過起一個有 `curl` 指令的容器，針對該 API 服務的 `service` 資源進行存取，並得到以下結果
 ```bash
- curl http://tutorial-api-service.default.svc.cluster.local:8080/hello
+kubectl run mycurlpod --image=curlimages/curl -i --tty -- sh
+/ $ curl http://tutorial-api-service.default.svc.cluster.local:8080/hello
 Hello Skaffold! From host: tutorial-api-85446658dd-8pvzr/10.0.2.197
+```
+
+## Skaffold features
+- Easy to share 
+```shell
+# install skaffold
+git clone repository URL
+skaffold dev
+```
+- Integrated with IDE
+- File sync 
+  - 將更改的檔案直接複製到已經運行的容器中，以避免重新構建、重新部署和重新啟動容器
+- Super-fast local development
+  - 可判別 Kubernetes context 是否設置為本地 Kubernetes 集群，避免將 image 推送到遠程容器倉庫。因此，可以減少網路延遲。
+  - 能即時檢測更改，並自動執行構建、推送和部署工作流程。這可以加速內部開發循環，還可以提高工作效率。
+- Effortless remote development
+  - Skaffold 不僅能夠提升內部開發效率，也可創建完整的 CI/CD 流程
+- Built-in image tag management
+  - 原因是 Skaffold 會在每次重建 Image 時自動生成 image tag。這樣不必手動編輯 Kubernetes 佈署檔案。Skaffold 的默認標記策略是 `gitCommit`。
+```yaml
+spec:
+  containers:
+  - image: cch0124/spring-tutorial-api:{imageTag}
+    name: tutorial-api
+```
+- Lightweight
+  - CLI 工具，輕巧、易使用
+- Pluggable architecture
+  - Skaffold 具有可插拔的架構。可以挑選構建和部署工具，Skaffold 會相應調整。
+- Purpose-built for CI/CD pipelines
+  - Skaffold 可以建立有效的 CI/CD
+  - 使用 `skaffold run` 執行端到端管道或使用單獨的命令(skaffold build 或 skaffold deploy)
+  - 使用 `skaffold render` 和 `skaffold apply` 等命令，可以使應用程序創建 *GitOps 風格*的持續交付工作
+- Effortless environment management
+  - Skaffold 可以針對不同環境定義 build、test或deploy配置檔
+  - Skaffold profiles 參數可以幫助我們實現
+### Skaffold profile patches
+
+```yaml
+build:
+  artifacts:
+    - image: docker.io/hiashish/skaffold-example
+      docker:
+        dockerfile: Dockerfile
+    - image: docker.io/hiashish/skaffold2
+    - image: docker.io/hiashish/skaffold3
+deploy:
+  kubectl:
+    manifests:
+      - k8s-pod
+profiles:
+  - name: dev
+    patches:
+      - op: replace 
+        path: /build/artifacts/0/docker/dockerfile
+        value: Dockerfile_dev
+```
+上述範例 Skaffold 將用於構建第一個 docker.io/hiashish/skaffold-example 映像的 Dockerfile 替換為名為 Dockerfile_dev 的不同 Dockerfile。
+
+`patches` 部分的操作字串(op)指定了該補丁要執行的操作。其選項有
+- add 
+- remove 
+- replace 
+- move
+- copy 
+- test
+### Skaffold profile activation
+下面新增一個名為 docker 的 `profiles`。這邊是使用地端 docker 進行 Image 的打包流程，並將其推倒倉庫。
+```yaml
+...
+profiles:
+  - name: dev-cluster
+    activation:
+      - env: ENV=dev
+      - kubeContext: kubernetes-admin@kubernetes
+        command: dev
+  - name: docker
+    build:
+      tagPolicy:
+        customTemplate:
+          template: "{{.FOO}}_{{.BAR}}-docker"
+          components:
+            - name: FOO
+              dateTime:
+                format: "2006-01-02"
+                timezone: "UTC"
+            - name: BAR
+              gitCommit:
+                variant: AbbrevCommitSha
+      artifacts:
+        - image: spring-tutorial-api
+          context: .
+          docker:
+            dockerfile: Dockerfile
+            cacheFrom:
+              - spring-tutorial-api
+      local:
+        push: true
+        useDockerCLI: false
+        useBuildkit: false
+```
+
+透過 --profile 或 -p 參數運行 `skaffold run` 或 `skaffold dev` 命令時，將激活此配置文件。
+
+```shell
+skaffold --default-repo docker.io/cch0124 run -p docker
+```
+
+沒有在 `profiles` 這個  docker 下指定部署部分。表示 Skaffold 將繼續使用 `deploy` 關鍵字下的 kubectl 進行部署。如果需要多個 `profiles`，可以使用 `-p` 參數並使用逗號分隔的配置文件，如下
+
+```shell
+skaffold dev -p profile1,profile2
 ```

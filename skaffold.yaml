@@ -31,3 +31,27 @@ profiles:
   - env: ENV=dev
   - kubeContext: kubernetes-admin@kubernetes
     command: dev
+- name: docker
+  build:
+    tagPolicy:
+      customTemplate:
+        template: "{{.FOO}}_{{.BAR}}-docker"
+        components:
+          - name: FOO
+            dateTime:
+              format: "2006-01-02"
+              timezone: "UTC"
+          - name: BAR
+            gitCommit:
+              variant: AbbrevCommitSha
+    artifacts:
+      - image: spring-tutorial-api
+        context: .
+        docker:
+          dockerfile: Dockerfile
+          cacheFrom:
+            - spring-tutorial-api
+    local:
+      push: true
+      useDockerCLI: false
+      useBuildkit: false
