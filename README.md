@@ -452,3 +452,228 @@ skaffold --default-repo docker.io/cch0124 run -p docker
 ```shell
 skaffold dev -p profile1,profile2
 ```
+
+`activation` 是另一種方法是使用 `skaffold.yaml` 當中的物件根據以下內容自動觸發配置文件
+- kubeContext
+- env An environment variable: env
+- command A Skaffold command
+
+下面有一個 dev-cluster 的 profiles 配置內容
+```yaml
+...
+profiles:
+- name: dev-cluster
+  activation:
+  - env: ENV=dev
+  - kubeContext: kubernetes-admin@kubernetes
+    command: dev
+```
+
+如果 `env` 環境變數的值匹配 `dev` 則會自動匹配該配置(dev-cluster)。也因為該配置這邊沒有特別定義 build、test 和 deploy 步驟，所以會引用主配置部分。除此之外，如果滿足以下條件，將自動觸發配置(dev-cluster)。
+- ENV 是 dev
+- kubeContext 是 kubernetes-admin@kubernetes
+- command 是 skaffold run
+
+在 skaffold.yaml 中我們預設使用 kubectl 進行佈署。當然這些可以根據不同環境使用不同方式佈署，像是開發使用 kubectl，在生產使用 Helm。
+
+Skaffold 默認下會從 `${HOME}/.kube/` 路徑中的 kube 配置檔案中查找當前的 Kubernetes *context*。要變動他可以如下
+```shell
+skaffold dev --kube-context <myrepo>
+```
+抑或者在 skaffold.yaml 中使用 `kubeContext` 指定。而 CLI 的優先權會最高。
+
+## A local Kubernetes cluster
+如果 Kubernetes context 設置為地端 Kubernetes 集群，則無需將 images 推送到飛地端 Kubernetes 集群。相反，Skaffold 會將 image 讓本地 Docker daemon 觸發以加快開發週期。
+地端開發 Kubernetes 集群方式有以下
+- Docker Desktop
+- Minikube
+- Kind
+- k3d
+- etc.
+## Demystifying Skaffold's architecture
+Skaffold 的設計考慮了可插拔性，它將系統細分為的更小部分可以想成是一個模組，該模組可以獨立創建、修改、替換或與其他模組或不同系統之間交換，其架構如下
+
+![img.png](images/img.png)
+
+對於 skaffold 整體模組可以如下細分
+- Container image builders
+  - Dockerfile
+  - Jib
+  - Bazel
+  - Cloud-Native Buildpacks
+  - Custom Script
+- Container testing tools/strategy
+  - Custom tests
+  - Container structure tests
+- Container image taggers 
+- Container deployment tools
+  - Helm
+  - kubectl
+  - kustomize
+
+Skaffold 對於 Image 的 tag 管理，當前支援以下
+- The gitCommit tagger
+- The inputDigest tagger
+- The envTemplate tagger
+- The datetime tagger
+- The customTemplate tagger
+- The sha256 tagger
+
+當前範例流程
+
+Detecting source code changes -> Jib -> Tagging artifacts -> kubectl
+
+也許生產環境中，使用 Jib 插件來構建 Image、測試、將其推送到 registry，最後使用 Helm 將其部署到遠程 Kubernetes 集群。
+
+## Skaffold workflow
+
+通常，Skaffold 以兩種模式工作，*持續開發*或透過 `skaffold dev` 和 `skaffold run` 等命令的端到端開發。以 `skaffold dev` 來說會是像這樣
+1. 接收並監看源碼以進行更改
+2. 如果用戶將更改的文件標記為可以復制，則直接複製更改的文件以進行 `build`
+3. 從源碼建構 Image(產物)
+4. 使用 container-structure-tests 或自定義腳本測試建構的產物
+5. 將產物打上 tag
+6. 推送產物，如果為非本地的集群
+7. 用新的 tag 更新 Kubernetes 佈署檔案
+8. 佈署產物
+9. 使用內置的檢查，監控已部署的物件
+10. 從正在運行的 pod 觀察 log
+11. 按 Ctrl + C 在退出時清理所有已部署的物件
+
+而 `skaffold run` 類似，但還是有以下的不同
+- Skaffold 不會持續監看程式碼更改
+- 預設下，Skaffold 不會從正在運行的 pod 在控制台顯示 log
+- 不會進行佈署物件的清理
+
+對於持續開發就是(skaffold dev)
+```
+watch for changes -> Build artifacts -> Test artifacts -> Tag image -> Push image -> Update manifests -> Deploy -> Stream logs -> Cleanup
+```
+對於 end-to-end 開發(skaffold run)
+```
+Build artifacts -> Test artifacts -> Tag image -> Push image -> Update manifests -> Deploy
+```
+
+## Skaffold configuration
+Skaffold 需要執行的任何操作都應在 skaffold.yaml 中明確定義。像是要用什麼來建構 Image，要用什麼方式佈署到哪個集群。`Skaffold` 預設當前目錄中找到配置文件檔案為 `skaffold.yaml`，但是，我們可以用 `--filename` 覆蓋該位置。`skaffold.yaml` 有以下主要元件
+
+| Component                                                        | Description                         |
+|------------------------------------------------------------------|-------------------------------------|
+| apiVersion                                                       | 定義 Skaffold API 版本                  |
+| Kind                                                             | 值為 `Config`                         |
+| Metadata                                                         | 包含有關配置的其它屬性，像是 `name`               |
+| [Build](https://skaffold.dev/docs/references/yaml/#build)        | 描述如何構建 Image，並可定義 tag 和 push 流程     |
+| [Test](https://skaffold.dev/docs/references/yaml/#test)          | 如何測試 `Image`                        |
+| [Deploy](https://skaffold.dev/docs/references/yaml/#deploy)      | 如何佈署 `Image`，像是 `helm`、`kubectl` 等  |
+| [Profiles](https://skaffold.dev/docs/references/yaml/#profiles)  | 可以覆蓋用於 `build`、`test` 或 `deploy` 配置 |
+| Requires                                                         | 要導入當前配置的其他 `Skaffold` 配置列表          |
+
+Skaffold 也支援持全局配置檔案，該檔案位於 `~/.skaffold/` 配置路徑中。支援的選項可參考[官方](https://skaffold.dev/docs/design/global-config/)，可以在全局級別定義
+```shell
+$ skaffold config
+Interact with the global Skaffold config file (defaults to `$HOME/.skaffold/config`)
+
+Available Commands:
+  list        List all values set in the global Skaffold config
+  set         Set a value in the global Skaffold config
+  unset       Unset a value in the global Skaffold config
+
+Use "skaffold <command> --help" for more information about a given command.
+cch@Itachi:~$ ls .skaffold/config
+.skaffold/config
+$ cat .skaffold/config
+global:
+  survey:
+    last-prompted: "2022-08-06T11:16:52+08:00"
+  collect-metrics: true
+  update:
+    last-prompted: "2022-08-06T20:37:09+08:00"
+kubeContexts: []
+```
+
+## Understanding common CLI commands
+透過 CLI 我們可以完成 CI/CD 流程
+
+- **Commands for end-to-end pipelines**
+  - **skaffold run** 允許一次建置(build) 和佈署(deploy)
+  - **skaffold dev** 允許觸發構建(build)和部署(dev)的持續開發循環，此工作流程將在退出時清理
+  - **skaffold debug** 允許您觸發持續開發循環並在調試模式下構建(build)和部署(deploy)管道，此工作流程也將在退出時清理
+- **Commands for CI/CD pipelines**
+  - **skaffold build** 構建、標記和推送 Image
+  - **skaffold test** 針對已構建的應用程式 Image 運行測試
+  - **skaffold deploy** 對更新的 image 進行佈署
+  - **skaffold delete** 針對佈署的物件進行資源清除
+  - **skaffold render** 允許構建應用程式 Image，然後將帶有新構建的 tag 合成 Kubernetes 清單導出到檔案或終端
+  - **skaffold apply** 將模板化的 Kubernetes 清單作為輸入，並在目標集群上創建資源
+- **Commands for getting started**
+  - **skaffod init** 初始化
+  - **skaffold fix** 更新版本
+- **Miscellaneous commands**
+  - **skaffold help** 
+  - **skaffold version**
+  - **skaffold completion**
+  - **skaffold config** 管理 skaffold context 參數
+  - **skaffold credits**
+  - **skaffold diagnose** 針對當前 skaffold 的配置
+  - **skaffold schema** 打印用於驗證 skaffold.yaml 配置的 JSON 模式
+## Skaffold pipeline stages
+
+Skaffold 流水線階段(pipeline stage)可大致分為以下幾個領域：
+- Init
+- Build
+- Tag
+- Test
+- Deploy
+- File
+- Log tailing
+- Port forwarding
+- Cleanup
+### Init stage
+通常會建置一個基本的 Skaffold 配置檔(skaffold init)。*Skaffold 在專案目錄中會查找任何構建配置檔案，例如 Dockerfile、build.gradle 和 pom.xml，然後自動生成構建和部署配置*。如果 Skaffold 檢測到多個構建配置檔案，它會提示將構建配置檔案與部署配置中檢測到的任何 Images 配對，並讓用戶端選擇。也可以使用 `skaffold init` 命令傳遞 `--generate-manifests` 來生成清單內容。
+
+### Build stage
+Skaffold 支援各種不同建置 Images 的工具。
+- Jib
+- Cloud Native Buiildpacks
+- etc.
+在集群中，構建由 `kaniko` 或使用自定義腳本(custom script)。僅 Dockerfile、Jib 和使用 Cloud Build 的 Buildpack 支持遠程構建。對於本地構建，基本上都可以用
+
+透過 skaffold.yaml 文件的構建部分設置構建配置。下面是一個例子
+
+```yaml
+build:
+  tagPolicy:
+    sha256: {}
+  artifacts:
+  - image: cch0124/spring-tutorial-api
+    custom:
+      buildCommand: mvn compile jib:build -Djib.to.auth.username=$USERNAME -Djib.to.auth.password=$PASSWORD -Dimage=$IMAGE
+      dependencies:
+        paths:
+        - src/**
+```
+### Tag stage
+Skaffold 可以透過以下 images tag 策略：
+- 透過 `gitCommit` 進行 tag，該利用 Git 提交來 tag images
+- 透過 sha256 進行 tag，使用最新標記來 tag images
+- 透過 envTemplate 進行 tag，使用環境變數來 tag images
+- 透過 dateTime 進行 tag，接受具有可配置模式的當前日期和時間
+- 透過 customTemplate 進行 tag
+
+使用 `skaffold.yaml` 的 `build` 中的 `tagPolicy` 字段配置 tag 策略。如果未指定 `tagPolicy`，則默認為 `gitCommit` 策略。
+```yaml
+#customTemplate 範例
+  build:
+    tagPolicy:
+      customTemplate:
+        template: "{{.FOO}}_{{.BAR}}-docker"
+        components:
+          - name: FOO
+            dateTime:
+              format: "2006-01-02"
+              timezone: "UTC"
+          - name: BAR
+            gitCommit:
+              variant: AbbrevCommitSha
+
+```
