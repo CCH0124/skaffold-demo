@@ -24,7 +24,7 @@ spec:
         runAsUser: 1000
         runAsNonRoot: true
       containers:
-      - image: cch0124/spring-tutorial-api:latest
+      - image: cch0124/spring-tutorial-api
         name: tutorial-api
         securityContext:
           readOnlyRootFilesystem: false
@@ -81,7 +81,7 @@ spec:
         - name: application-config
           mountPath: /opt/config
           readOnly: true
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
       restartPolicy: Always
       volumes:
         - name: application-config
