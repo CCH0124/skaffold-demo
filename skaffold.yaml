@@ -5,9 +5,6 @@ metadata:
 build:
   tagPolicy:
     sha256: {}
-    # gitCommit:
-    #   variant: AbbrevCommitSha
-    #   ignoreChanges: false
   artifacts:
   - image: cch0124/spring-tutorial-api
     custom:
@@ -15,7 +12,6 @@ build:
       dependencies:
         paths:
         - src/**
-    # jib: {}
 deploy:
   kubectl:
     manifests:
@@ -55,3 +51,55 @@ profiles:
       push: true
       useDockerCLI: false
       useBuildkit: false
+- name: test
+  test:
+    - image: docker.io/cch0124/spring-tutorial-api
+      custom:
+        - command: mvn test -Dmaven.test.skip=false
+- name: sync
+  build:
+    tagPolicy:
+      customTemplate:
+        template: "{{.DATE}}_{{.SHA}}-sync"
+        components:
+          - name: DATE
+            dateTime:
+              format: "2006-01-02"
+              timezone: "UTC"
+          - name: SHA
+            gitCommit:
+              variant: AbbrevCommitSha
+    artifacts:
+      - image: docker.io/cch0124/spring-tutorial-api
+        context: .
+        jib:
+          type: maven
+          args:
+            - -Psync
+        sync:
+          auto: true
+- name: userDefinedPortForward
+  portForward:
+    - localPort: 9090
+      port: 8080
+      namespace: default
+      resourceName: tutorial-api-service
+      resourceType: service
+- name: jib
+  build:
+    tagPolicy:
+      customTemplate:
+        template: "{{.SHA}}-jib"
+        components:
+          - name: SHA
+            gitCommit:
+              variant: AbbrevCommitSha
+    artifacts:
+      - image: docker.io/cch0124/spring-tutorial-api
+        context: .
+        jib:
+          type: maven
+          fromImage: adoptopenjdk:16-jre
+          project: cch.com.example:skaffold
+          args:
+            - -DskipTests
