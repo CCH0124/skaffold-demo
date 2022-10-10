@@ -677,3 +677,256 @@ Skaffold 可以透過以下 images tag 策略：
               variant: AbbrevCommitSha
 
 ```
+
+### Test stage
+
+#### Container structure test
+Skaffold 支援在建構 images 上執行[容器結構測試](https://github.com/GoogleContainerTools/container-structure-test)。器結構測試(Container Structure Test)主要是為了驗證容器的*內容*和*結構*。例如，可能想在容器中運行一些指令來測試它是否成功執行。構建物件(building the artifact)後，Skaffold 將在 images 上運行相關的結構測試，*如果測試失敗，Skaffold 將不會往下部署*。
+
+#### Custom test
+透過 Skaffold 自定義測試，可以自定義驗證流程作為其開發循環的一部分，並且會在佈署之前執行。也可以使用 `--skip-tests` 選擇不運行自定義測試，也可以使用 `skaffold test` 單獨運行測試。
+我們可以如下定義流程
+- unit tests
+- GCP Container Analysis 、Anchore Grype 對 images 運行驗證和安全掃描
+- 驗證 Kubernetes yaml 驗證 [kubeval](https://github.com/instrumenta/kubeval) 或 [kubeconform](https://github.com/yannh/kubeconform)
+- 使用 Helm charts 可以用 `helm lint` 驗證
+
+定義一個 name 為 test 的 `profiles`
+```yaml
+- name: test
+  test:
+    - image: docker.io/cch0124/spring-tutorial-api
+      custom:
+        - command: mvn test -Dmaven.test.skip=false
+```
+
+接著運行 `skaffold dev --profile=test`
+
+#### Deploy stage
+Skaffold 部署階段通常將 Kubernetes 佈署 yaml 中 images 的 tag 名稱替換為最終 tag 的 images 名稱來呈現 Kubernetes 要佈署資源，甚至可能透過擴展 `helm template` 或 `kustomize` 覆蓋資源。`Skaffold` 在內部使用 `kubectl rollout status` 來驗證部署的狀態。
+
+Skaffold 目前支援以下工具將應用程式部署到本地或遠程 Kubernetes 集群：
+- kubectl
+- helm
+- kustomize
+以 `kubectl` 為例，我們在 `deploy` 字段設置部署配置，
+
+```yaml
+deploy:
+  kubectl:
+    manifests:
+    - k8s/deploy-native/tutorial/application-properties-cm.yaml
+    - k8s/deploy-native/tutorial/deployment.yaml
+    - k8s/deploy-native/tutorial/globalenv-cm.yaml
+    - k8s/deploy-native/tutorial/globalenv-secret.yaml
+    - k8s/deploy-native/tutorial/ingress.yaml
+    - k8s/deploy-native/tutorial/service.yaml
+```
+
+
+## File sync
+Skaffold 有一個很棒的功能，可以將更改的檔案複製到已部署的容器中，而*無需重新構建、重新部署和重新啟動相應的 pod*。
+
+我們可以透過向 `skaffold.yaml` 檔案中的物件產物(artifact)添加帶有同步規則的同步(sync)部分來啟用此檔案複製功能。在內部，Skaffold 創建一個 `.tar` 檔案，其中包含與我們在 `skaffold.yaml` 檔案中定義的同步規則匹配的更改檔案。然後，這個 `.tar` 檔案被傳輸到相應的容器中並在其中提取。
+
+Skaffold 支持以下類型的同步
+- **manual** 需要從運行容器的本地和目標路徑中指定來源檔案路徑
+- **infer** Skaffold 將查看 Dockerfile 來推斷目標路徑。在同步規則下，可以指定哪些檔案符合同步條件
+- **auto** Skaffold 將自動把已知檔案類型生成同步規則
+
+Jib 與 Skaffold 的集成允許在進行更改後將 class 檔案、資源檔案和 Jib 的額外目錄文件自動同步到遠程容器。必須在編譯/實現範圍內包含 spring-boot-devtools 依賴項，這與官方文檔中概述的配置相反。對於 jib 他會不知道構建中的任何特殊 spring 配置，建議使用配置文件來打開或關閉 jib 容器構建中的 devtools 支援。
+
+定義一個 `profiles`，並且 sync 設為 auto。
+
+```yaml
+- name: sync
+  build:
+    artifacts:
+      - image: docker.io/cch0124/spring-tutorial-api
+        context: .
+        jib:
+          type: maven
+          args:
+          - -Psync
+        sync:
+          auto: true
+```
+
+
+### Log tailing 
+Skaffold 可以追蹤由它構建和部署的容器日誌。使用此功能可以在執行 `skaffold dev`、`skaffold debug` 或 `skaffold run` 時將 Log 從集群追蹤到本地開發機器上。
+
+對於 `skaffold dev`、`skaffold debug` Log 功能是預設啟用。否則需要使用 `-tail` 進行參數配置
+
+
+### Port forwarding
+Skaffold 在開發(dev)、調試(debug)、部署(deploy)或運行(run)模式下支援服務的自動端口轉發和用戶定義的端口轉發。可以不必公開端點來存取應用程式，端口轉發有助於本地開發。Skaffold 在內部使用 `kubectl port-forward` 來實現端口轉發，因此可以*在 `skaffold.yaml` 中明確定義自定義端口轉發*，或者在運行 skaffold dev、debug、run 或 deploy 時傳遞 `--port-forward` 參數。架構如下圖所示
+
+![](https://skaffold.dev/images/portforward.png) From skaffold 官方
+
+我們可以如下定義，同樣我們使用一個 `profiles`
+
+```yaml
+- name: userDefinedPortForward
+  portForward:
+    - localPort: 9090
+      port: 8080
+      namespace: default
+      resourceName: tutorial-api-service
+      resourceType: service
+```
+
+### Cleanup
+
+使用 `skaffold run` 和 `skaffold dev`，可以在 Kubernetes 集群中創建資源，創建儲存在上的 images，有時還可以將 images 推送到其倉庫(registry)。
+
+Skaffold 提供了清除資源功能和其中一些副作用
+- 執行 `skaffold delete` 或是透過 `Ctrl+C`
+- 可以通過傳遞 `--no-prune=false` 為本地 `Docker daemon images` 啟用 image 修剪，由於預設情況下啟用了產物緩存(artifact caching )，因此需要禁用它才能使清除工作。實際要運行的指令是 `skaffold dev --no-prune=false --cache-artifacts=false`，透過按 `Ctrl + C` 進行 `skaffold dev` 和 `skaffold debug`，`Skaffold` 將自動清理儲存在本地 Docker daemon 上的 images。
+- 對於已推送到遠程容器倉庫的 images，用戶必須負責清理
+
+以下面 `profiles` 為 `docker` 的設定來說，我們使用地端的 docker 服務進行建置
+
+```yaml
+- name: docker
+  build:
+    tagPolicy:
+      customTemplate:
+        template: "{{.FOO}}_{{.BAR}}-docker"
+        components:
+          - name: FOO
+            dateTime:
+              format: "2006-01-02"
+              timezone: "UTC"
+          - name: BAR
+            gitCommit:
+              variant: AbbrevCommitSha
+    artifacts:
+      - image: spring-tutorial-api
+        context: .
+        docker:
+          dockerfile: Dockerfile
+          cacheFrom:
+            - spring-tutorial-api
+    local:
+      push: true
+      useDockerCLI: false
+      useBuildkit: false
+```
+
+透過運行 `skaffold dev --no-prune=false --cache artifacts=false` 。在構建和部署之後，可以按 `Ctrl + C`，這應該會修剪 images 並刪除任何 Kubernetes 資源。
+
+
+## Debugging with Skaffold
+透過 `skaffold debug` 我們可以調試應用程式。Skaffold 為不同容器的 runtime 技術提供調試。一旦啟用調試，相關的調試端口就會暴露出來並標記為端口轉發到本地機器。
+
+但是，在調試模式下，`skaffold debug` 將禁用 images 重建和同步(sync)，因為如果保存檔案更改，它可能會導致調試意外終止，但還是可以使用 `--auto-build`、`--auto-deploy` 和 `--auto-sync` 參數允許 images 重建和同步。
+
+##  Working with Skaffold container image builders
+### Dockerfile 
+這些年來，Docker 一直是創建容器的首要標準。Docker 架構依賴於一個守護(daemon)行程，該行程必須運行才能為所有 Docker 指令(push、pull、run ...等)提供服務。我們可以借助 Dockerfile 製作應用程式的容器 images 時進行可以自定義其運行環境內容。
+
+```
+Java Source Code ---Create Jar---> Dockerfile ---docker build---> Docker images--- docker run ---> container
+```
+
+可以參考本[範例](Dockerfile)
+
+### Jib
+[Jib](https://github.com/GoogleContainerTools/jib) 代表 Java Image Builder，完全用 Java 編寫。但是，它考藉由 CLI 工具，可用於 `Node.js` 上的 `Python` 等非 Java 應用程序。
+
+*使用 Jib 的顯著優勢是無需了解有關安裝 `Docker` 或維護 `Dockerfile` 的任何訊息*。Jib 是無守護進程(daemonless)的。對為 Java 開發人員，只關心最後可執行產物（jar 檔案），而使用 Jib 我們不必處理任何 Docker 相關操作。
+
+對於本專案來說我們透過 maven 引入 Jib 插件並透過一些配置來將我們應用程式容器化。其流程大致如下
+
+```
+Project --- Jib ---> Container Image Registry
+```
+
+同樣新增一個 `profiles` 名為 jib，其如下定義
+
+```yaml
+- name: jib
+  build:
+    tagPolicy:
+      customTemplate:
+        template: "{{.SHA}}-jib"
+        components:
+          - name: SHA
+            gitCommit:
+              variant: AbbrevCommitSha
+    artifacts:
+      - image: docker.io/cch0124/spring-tutorial-api
+        context: .
+        jib:
+          type: maven
+          fromImage: adoptopenjdk:16-jre # base image
+          project: cch.com.example:skaffold
+          args:
+            - -DskipTests
+```
+
+最後透過 `skaffold build -p jib` 驗證
+
+Jib 巧妙將應用程式映像層拆分為以下幾層，以加快重建速度：
+- Classes
+- Resources
+- Project Dependencies
+- Snapshot and all other dependencies
+目標是將經常更改的檔案與少更改的檔案分開，直接的好處是不必重建整個應用程式，因為 Jib 只重建包含已更改檔案的層，並為未更改的檔案重用緩存層。
+使用 Jib，如果不指定 images digest，可能會看到以下警告：
+```shell
+[INFO] --- jib-maven-plugin:3.2.1:build (default-cli) @ skaffold ---
+[WARNING] 'mainClass' configured in 'maven-jar-plugin' is not a valid Java class: ${start-class}
+[INFO] 
+[INFO] Containerizing application to cch0124/spring-tutorial-api:9030de8-dirty-jib...
+[WARNING] Base image 'adoptopenjdk:16-jre' does not use a specific image digest - build may not be reproducible # this
+[INFO] Getting manifest for base image adoptopenjdk:16-jre...
+[INFO] Building dependencies layer...
+[INFO] Building resources layer...
+[INFO] Building classes layer...
+[INFO] Building jvm arg files layer...
+```
+
+我們可以如下更改
+```xml
+<plugin>
+				<groupId>com.google.cloud.tools</groupId>
+				<artifactId>jib-maven-plugin</artifactId>
+				<version>3.2.1</version>
+				<configuration>
+					<from>
+						<image>openjdk:16-jdk-alpine@sha256:b40f81a9f7e7e4533ed0c6ac794ded9f653807f757e2b8b4e1fe729b6065f7f5</image>
+					</from>
+					...
+				</configuration>
+			</plugin>
+```
+
+### Custom script
+如果沒有建構 images 的支援，可以使用自定義腳本選項。此選項，可以編寫自定義腳本或選擇喜歡的構建工具，可以透過向 skaffold.yaml 文件的構建部分中的每個 `artifacts` 添加自定義字段來配置自定義腳本。
+
+以下面為例，使用 `custom` 字段
+
+```yaml
+build:
+  tagPolicy:
+    sha256: {}
+  artifacts:
+  - image: cch0124/spring-tutorial-api
+    custom:
+      buildCommand: mvn compile jib:build -Djib.to.auth.username=$USERNAME -Djib.to.auth.password=$PASSWORD -Dimage=$IMAGE
+      dependencies:
+        paths:
+        - src/**
+```
+
+## Exploring Skaffold container image deployers
+
+使用 Skaffold，可以使用以下三個工具將應用程序部署到 Kubernetes
+- Helm
+- kubectl
+- Kustomize
+
+### Helm
+Helm 是 package manager 工具，charts 是 Kubernetes 應用程式的包。
