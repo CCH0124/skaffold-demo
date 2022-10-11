@@ -4,7 +4,6 @@ metadata:
   name: {{ include "tutorial.fullname" . }}
   labels:
     {{- include "tutorial.labels" . | nindent 4 }}
-  namespace: {{ .Release.Namespace }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
@@ -56,6 +55,36 @@ spec:
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          env:
+          - name: JAVA_TOOL_OPTIONS
+            value: "-Dspring.config.location=/opt/config/application.properties"
+          - name: DB_URL
+          valueFrom:
+            configMapKeyRef:
+              key: DB_URL
+              name: {{ include "tutorial.fullname" . }}-global
+          - name: DB_USER
+            valueFrom:
+              secretKeyRef:
+                key: DB_USER
+                name: {{ include "tutorial.fullname" . }}-global-secret
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: DB_PASSWORD
+                name: {{ include "tutorial.fullname" . }}-global-secret
+          volumeMounts:
+          - name: application-config
+            mountPath: /opt/config
+            readOnly: true
+      restartPolicy: Always
+      volumes:
+        - name: application-config
+          configMap:
+            name: {{ include "tutorial.fullname" . }}
+            items:
+            - key: application.properties 
+              path: application.properties
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

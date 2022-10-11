@@ -129,3 +129,12 @@ ingress:
   #  - secretName: chart-example-tls
   #    hosts:
   #      - chart-example.local
+
+configAnnotations: {}
+application:
+  config: {}
+
+postgresql:
+  url: ""
+  user: ""
+  password: ""
