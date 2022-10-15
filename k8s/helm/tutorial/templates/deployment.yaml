@@ -59,10 +59,10 @@ spec:
           - name: JAVA_TOOL_OPTIONS
             value: "-Dspring.config.location=/opt/config/application.properties"
           - name: DB_URL
-          valueFrom:
-            configMapKeyRef:
-              key: DB_URL
-              name: {{ include "tutorial.fullname" . }}-global
+            valueFrom:
+              configMapKeyRef:
+                key: DB_URL
+                name: {{ include "tutorial.fullname" . }}-global
           - name: DB_USER
             valueFrom:
               secretKeyRef:

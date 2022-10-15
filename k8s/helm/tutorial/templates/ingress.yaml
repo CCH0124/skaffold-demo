@@ -1,11 +1,12 @@
 {{- if .Values.ingress.enabled -}}
 {{- $fullName := include "tutorial.fullname" . -}}
-{{- if .Values.service.enableHttp }}
-{{- $svcPort := .Values.service.ports.http -}}
-{{- end}}
-{{- if .Values.service.enableHttps }}
-{{- $svcPort := .Values.service.ports.https -}}
-{{- end}}
+# {{- if .Values.service.enableHttp }}
+# {{- $svcPort := .Values.service.ports.http -}}
+# {{- end}}
+# {{- if .Values.service.enableHttps }}
+# {{- $svcPort := .Values.service.ports.https -}}
+# {{- end}}
+{{- $svcPort := (or (not (empty .Values.service.ports.http)) (not (empty .Values.service.ports.https))) }}
 {{- if and .Values.ingress.className (not (semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion)) }}
   {{- if not (hasKey .Values.ingress.annotations "kubernetes.io/ingress.class") }}
   {{- $_ := set .Values.ingress.annotations "kubernetes.io/ingress.class" .Values.ingress.className}}

@@ -132,7 +132,14 @@ ingress:
 
 configAnnotations: {}
 application:
-  config: {}
+  config: 
+    health:
+      livenessstate:
+        enabled: true
+      readinessstate:
+        enabled: true
+      probes:
+        enabled: true
 
 postgresql:
   url: ""

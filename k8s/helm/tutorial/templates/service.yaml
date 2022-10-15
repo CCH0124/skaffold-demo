@@ -43,7 +43,6 @@ spec:
       nodePort: {{ .Values.service.nodePorts.https }}
     {{- end }}
   {{- end }}
-  {{- end }}
   selector:
     {{- include "tutorial.selectorLabels" . | nindent 4 }}
 {{- end }}

@@ -4,9 +4,21 @@ metadata:
   name: {{ include "tutorial.fullname" . }}
   labels:
     {{- include "tutorial.labels" . | nindent 4 }}
-{{- if .Values.controller.configAnnotations }}
+{{- if .Values.configAnnotations }}
   annotations: {{ toYaml .Values.configAnnotations | nindent 4 }}
 {{- end }}
 data:
   application.properties: |-
-  {{ .Values.application.config | indent 4 }}
+    spring.datasource.url=jdbc:postgresql://${DB_URL}/test
+    spring.datasource.username=${DB_USER}
+    spring.datasource.password=${DB_PASSWORD}
+    spring.jpa.properties.hibernate.jdbc.lob.non_contextual_creation=true
+    spring.jpa.properties.hibernate.dialect= org.hibernate.dialect.PostgreSQLDialect
+    spring.jpa.hibernate.ddl-auto=update
+    management.health.livenessstate.enabled={{ .Values.application.config.health.livenessstate.enabled }}
+    management.health.readinessstate.enabled={{ .Values.application.config.health.readinessstate.enabled }}
+    management.endpoint.health.probes.enabled={{ .Values.application.config.health.probes.enabled }}
+    management.endpoint.health.show-details=always
+    management.endpoints.web.exposure.include=health
+    management.endpoints.jmx.exposure.include=health
+    server.shutdown=graceful
