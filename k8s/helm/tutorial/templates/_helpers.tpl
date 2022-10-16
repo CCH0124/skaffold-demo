@@ -60,3 +60,14 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Get application export port
+*/}}
+{{- define "tutorial.svericePort" -}}
+{{- if (not (empty .Values.service.ports.http)) }}
+{{- .Values.service.ports.http }}
+{{- else }}
+{{- .Values.service.ports.https }}
+{{- end }}
+{{- end }}
