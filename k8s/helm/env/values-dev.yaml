@@ -42,8 +42,8 @@ resources:
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
   limits:
-    cpu: 100m
-    memory: 128Mi
+    cpu: 1
+    memory: 1024Mi
   requests:
     cpu: 100m
     memory: 128Mi
@@ -108,7 +108,7 @@ service:
   # ipFamilies:
   #   - IPv4
   ports:
-    http: 8080
+    http: 80
     https: 443
   targetPorts:
     http: 8080
