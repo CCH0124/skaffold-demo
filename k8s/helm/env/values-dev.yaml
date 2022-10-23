@@ -8,7 +8,7 @@ image:
   repository: cch0124/spring-tutorial-api
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: ""
+  tag: latest
 
 imagePullSecrets: []
 nameOverride: ""
@@ -68,7 +68,7 @@ extraInitContainers: []
 ports:
   containerPort: {"http": "8080"}
 
-livenessProbe:
+livenessProbe: 
   httpGet:
     path: "/actuator/health/liveness"
     port: 8080
@@ -78,7 +78,7 @@ livenessProbe:
   failureThreshold: 5
   periodSeconds: 20
 
-readinessProbe:
+readinessProbe: 
   httpGet:
     path: "/actuator/health/readiness"
     port: 8080
@@ -108,7 +108,7 @@ service:
   # ipFamilies:
   #   - IPv4
   ports:
-    http: 80
+    http: 8080
     https: 443
   targetPorts:
     http: 8080
