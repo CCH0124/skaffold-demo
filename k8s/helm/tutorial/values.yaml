@@ -87,6 +87,7 @@ readinessProbe:
   successThreshold: 1
   timeoutSeconds: 3
 
+# -- application lifecycle
 lifecycle: {}
 
 
@@ -142,6 +143,7 @@ configAnnotations: {}
 #         enabled: true
 
 postgresql:
+  # -- postgresql connection url
   url: ""
   user: ""
   password: ""
