@@ -22,3 +22,16 @@ version: 0.1.0
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
 appVersion: "1.16.0"
+
+maintainers: 
+  - name: Itachi
+    email: test@gmail.com
+    url: https://google.com.tw
+
+sources:
+  - https://github.com/CCH0124/skaffold-demo
+home: https://github.com/CCH0124/skaffold-demo
+
+kubeVersion: ">=1.23.4-0"
+
+engine: gotpl
