@@ -1,4 +1,4 @@
-apiVersion: skaffold/v2beta28
+apiVersion: skaffold/v4beta1
 kind: Config
 metadata:
   name: skaffold-demo
@@ -14,8 +14,9 @@ build:
         - src/**
 deploy:
   kubectl:
-    manifests:
-    - k8s/deploy-native/tutorial/application-properties-cm.yaml
+    defaultNamespace: default
+    remoteManifests:
+    - k8s/deploy-native/tutorial/configMap.yaml
     - k8s/deploy-native/tutorial/deployment.yaml
     - k8s/deploy-native/tutorial/globalenv-cm.yaml
     - k8s/deploy-native/tutorial/globalenv-secret.yaml
@@ -134,3 +135,28 @@ profiles:
           valuesFiles:
             - "k8s/helm/env/values-dev.yaml"
     kubeContext: kubernetes-admin@kubernetes
+- name: kustomizeProd
+  build:
+    tagPolicy:
+      customTemplate:
+        template: "{{.SHA}}-jibkustomize"
+        components:
+          - name: SHA
+            gitCommit:
+              variant: AbbrevCommitSha
+    artifacts:
+      - image: cch0124/spring-tutorial-api # must match in setValueTemplates
+        context: .
+        jib:
+          type: maven
+          fromImage: adoptopenjdk:16-jre
+          project: cch.com.example:skaffold
+          args:
+            - -DskipTests
+  manifests:
+    kustomize:
+      paths:
+        - k8s/kustomize/overlays/prod
+      buildArgs: [] # 如果要定義額外參數
+  activation:
+    - kubeContext: kubernetes-admin@kubernetes

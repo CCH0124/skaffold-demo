@@ -1023,4 +1023,43 @@ deploy:
     - k8s/deploy-native/tutorial/ingress.yaml
     - k8s/deploy-native/tutorial/service.yaml
 ```
+
+如果要針對 helm install 和 upgrade 給予格外餐可以如下設定
+```yaml
+helm:
+  flags:	# 	additional option flags that are passed on the command line to helm.
+    global: []	# 	additional flags passed on every command.
+    install: []	# 	additional flags passed to (helm install).
+    upgrade: []	# 	additional flags passed to (helm upgrade).
+```
 ## Kustomize
+
+```yaml
+- name: kustomizeProd
+  build:
+    tagPolicy:
+      customTemplate:
+        template: "{{.SHA}}-jibkustomize"
+        components:
+          - name: SHA
+            gitCommit:
+              variant: AbbrevCommitSha
+    artifacts:
+      - image: cch0124/spring-tutorial-api # must match in setValueTemplates
+        context: .
+        jib:
+          type: maven
+          fromImage: adoptopenjdk:16-jre
+          project: cch.com.example:skaffold
+          args:
+            - -DskipTests
+  manifests:
+    kustomize:
+      paths:
+        - k8s/kustomize/overlays/prod
+      buildArgs: [] # 如果要定義額外參數
+  activation:
+    - kubeContext: kubernetes-admin@kubernetes
+```
+
+[kubernetes kustomization doc](https://kubernetes.io/docs/tasks/manage-kubernetes-objects/kustomization/)

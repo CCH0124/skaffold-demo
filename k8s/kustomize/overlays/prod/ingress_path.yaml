@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tutorial-ingress
+  labels:
+    app: tutorial-api
+  annotations:
+    ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /prod/(/|$)(.*)
+            pathType: Prefix
+            backend:
+              service:
+                name: tutorial-api-service
+                port:
+                  number: 8080
