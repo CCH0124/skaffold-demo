@@ -103,3 +103,34 @@ profiles:
           project: cch.com.example:skaffold
           args:
             - -DskipTests
+- name: jibWithHelm
+  build:
+    tagPolicy:
+      customTemplate:
+        template: "{{.SHA}}-jibWithHelm"
+        components:
+          - name: SHA
+            gitCommit:
+              variant: AbbrevCommitSha
+    artifacts:
+      - image: cch0124/spring-tutorial-api # must match in setValueTemplates
+        context: .
+        jib:
+          type: maven
+          fromImage: adoptopenjdk:16-jre
+          project: cch.com.example:skaffold
+          args:
+            - -DskipTests
+  deploy:
+    helm:
+      releases:
+        - name: spring-tutorial-api
+          chartPath: k8s/helm/tutorial
+          setValueTemplates:
+            image.repository: "{{.IMAGE_REPO_cch0124_spring_tutorial_api}}"
+            image.tag: "{{.IMAGE_TAG_cch0124_spring_tutorial_api}}"
+          setValues:
+            replicaCount: "2"
+          valuesFiles:
+            - "k8s/helm/env/values-dev.yaml"
+    kubeContext: kubernetes-admin@kubernetes

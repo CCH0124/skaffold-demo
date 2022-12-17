@@ -930,3 +930,97 @@ build:
 
 ### Helm
 Helm 是 package manager 工具，charts 是 Kubernetes 應用程式的包。
+
+```yaml
+- name: jibWithHelm
+  build:
+    tagPolicy:
+      customTemplate:
+        template: "{{.SHA}}-jibWithHelm"
+        components:
+          - name: SHA
+            gitCommit:
+              variant: AbbrevCommitSha
+    artifacts:
+      - image: cch0124/spring-tutorial-api # must match in setValueTemplates
+        context: .
+        jib:
+          type: maven
+          fromImage: adoptopenjdk:16-jre
+          project: cch.com.example:skaffold
+          args:
+            - -DskipTests
+  deploy:
+    helm:
+      releases:
+        - name: spring-tutorial-api
+          chartPath: k8s/helm/tutorial
+          setValueTemplates:
+             // v2.0.3
+            image.repository: "{{.IMAGE_REPO_cch0124_spring_tutorial_api}}"
+            image.tag: "{{.IMAGE_TAG_cch0124_spring_tutorial_api}}"
+          setValues:
+            replicaCount: "2"
+          valuesFiles:
+            - "k8s/helm/env/values-dev.yaml"
+    kubeContext: kubernetes-admin@kubernetes
+```
+
+佈署
+```shell
+$ skaffold run --profile=jibWithHelm
+```
+
+```shell
+$ kubectl get pods
+spring-tutorial-api-5949d8f77f-djdqn   1/1     Running   0              3m46s
+spring-tutorial-api-5949d8f77f-sb5m8   1/1     Running   0              3m46s
+```
+移除
+
+```shell
+$ skaffold delete --profile=jibWithHelm
+```
+
+
+```yaml
+  deploy:
+    helm:
+      releases:
+        - name: spring-tutorial-api
+          chartPath: k8s/helm/tutorial
+          setValueTemplates:
+             // v2.0.3
+            // 從 build 字段獲取 
+            image.repository: "{{.IMAGE_REPO_cch0124_spring_tutorial_api}}"
+            image.tag: "{{.IMAGE_TAG_cch0124_spring_tutorial_api}}"
+          // 覆蓋 helm chart 值
+          setValues:
+            replicaCount: "2"
+          // 參考的佈署檔案
+          valuesFiles:
+            - "k8s/helm/env/values-dev.yaml"
+    kubeContext: kubernetes-admin@kubernetes
+```
+
+
+[skaffold helm doc](https://skaffold.dev/docs/pipeline-stages/renderers/helm/)
+
+## kubectl
+kubectl 是一個命令工具，用於在與 Kubernetes 集群交互命令。它與 Kubernetes API 服務器交互以運行這些命令。可以使用它來完成各種任務，例如查看 pod 的日誌、創建 POD 等。
+
+可以在 `deploy` 如下定義
+
+```yaml
+
+deploy:
+  kubectl:
+    manifests:
+    - k8s/deploy-native/tutorial/application-properties-cm.yaml
+    - k8s/deploy-native/tutorial/deployment.yaml
+    - k8s/deploy-native/tutorial/globalenv-cm.yaml
+    - k8s/deploy-native/tutorial/globalenv-secret.yaml
+    - k8s/deploy-native/tutorial/ingress.yaml
+    - k8s/deploy-native/tutorial/service.yaml
+```
+## Kustomize
