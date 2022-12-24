@@ -1034,6 +1034,9 @@ helm:
 ```
 ## Kustomize
 
+Kustomize 是一種用於 Kubernetes 配置、管理和自定義內容的無模板聲明方法。對於 Kustomize，需提供了一個基礎框架和補丁。與 Helm 相比，我們提供了一個基礎部署框架，然後描述了不同環境的差異。
+
+在 skaffold 中定義了一個 `kustomizeProd` 描述，透過 `manifests` 字段來描述佈署策略。
 ```yaml
 - name: kustomizeProd
   build:
@@ -1062,4 +1065,128 @@ helm:
     - kubeContext: kubernetes-admin@kubernetes
 ```
 
-[kubernetes kustomization doc](https://kubernetes.io/docs/tasks/manage-kubernetes-objects/kustomization/)
+必須定義以下目錄結構才能讓 Kustomize 正常工作。在 `base` 目錄下有佈署資源的原始 yaml 檔案。該目錄是基礎框架不應該時常變更，反之，我們在它們之上定制創建新的資源定義(overlays 目錄)。
+```shell
+$ tree k8s/kustomize/
+k8s/kustomize/
+├── base
+│   ├── configMap.yaml
+│   ├── deployment.yaml
+│   ├── globalenv-cm.yaml
+│   ├── globalenv-secret.yaml
+│   ├── ingress.yaml
+│   ├── kustomization.yaml
+│   └── service.yaml
+└── overlays
+    ├── dev
+    │   ├── ingress_path.yaml
+    │   ├── kustomization.yaml
+    │   ├── namespace.yaml
+    │   └── resource_limit.yaml
+    └── prod
+        ├── ingress_path.yaml
+        ├── kustomization.yaml
+        ├── namespace.yaml
+        └── resource_limit.yaml
+
+4 directories, 15 files
+```
+
+在 base 目錄中有一個 `kustomization.yaml` 的檔案，它描述了要使用的資源。
+
+```yaml
+/skaffold-demo/k8s/kustomize/base$ cat kustomization.yaml 
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - deployment.yaml
+  - ingress.yaml
+  - configMap.yaml
+  - service.yaml
+  - globalenv-cm.yaml
+  - globalenv-secret.yaml
+```
+
+在 overlays/prod 目錄中則定義以下資源，在 base 目錄中的資源定義了一些的基礎內容，但不同場景也許有不同的資源需求。因此，只需創建要在我們的基礎之上應用的 YAML 內容，並在 kustomization.yaml 透過 `patchesStrategicMerge` 字段引用它。
+
+```yaml
+$ cat kustomization.yaml 
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namePrefix: prod-
+namespace: prod
+commonLabels:
+  owner: CCH
+commonAnnotations:
+  env: prod
+bases:
+  - ../../base
+resources:
+  - namespace.yaml
+patchesStrategicMerge:
+  - ingress_path.yaml
+  - resource_limit.yaml
+```
+
+字段的意思可參考[kubernetes kustomization doc](https://kubernetes.io/docs/tasks/manage-kubernetes-objects/kustomization/)
+
+以 resource_limit.yaml 來看，在 prod 環境需要更高的資源所以這邊定義了比 base 中預設值還高的資源內容。
+
+```yaml
+$ cat  resource_limit.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:  tutorial-api
+  labels:
+    app: tutorial-api
+    svc: tutorial-api-service
+spec:
+  template:
+    spec:
+      containers:
+        - image: cch0124/spring-tutorial-api:9030de8-dirty-jib
+          name: tutorial-api
+          securityContext:
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+          resources:
+            requests:
+              memory: '256Mi'
+              cpu: '500m'
+            limits:
+              memory: '1024Mi'
+              cpu: '1'
+```
+
+透過 skaffold 運行 `kustomizeProd`
+```shell
+$ skaffold run --profile=kustomizeProd --namespace=prod
+$ skaffold delete --profile=kustomizeProd --namespace=prod # 刪除資源
+```
+
+驗證
+```shell
+$ kubectl get all -n prod
+NAME                                     READY   STATUS    RESTARTS   AGE
+pod/prod-tutorial-api-6b9f447556-t9tzc   1/1     Running   0          2m18s
+
+NAME                                TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)    AGE
+service/prod-tutorial-api-service   ClusterIP   10.100.133.123   <none>        8080/TCP   2m18s
+
+NAME                                READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/prod-tutorial-api   1/1     1            1           2m18s
+
+NAME                                           DESIRED   CURRENT   READY   AGE
+replicaset.apps/prod-tutorial-api-6b9f447556   1         1         1       2m18s
+```
+
+```shell
+$ kubectl exec mycurlpod -- curl http://prod-tutorial-api-service.prod.svc.cluster.local:8080/states
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100    26{"age":28,"name":"itachi"}    0    26    0     0    715      0 --:--:-- --:--:-- --:--:--   742
+```
+
+
+更多資源可參考[skaffold Documentation](https://skaffold.dev/docs/)
