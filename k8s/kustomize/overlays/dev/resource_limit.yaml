@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:  tutorial-api
+  labels:
+    app: tutorial-api
+    svc: tutorial-api-service
+spec:
+  template:
+    spec:
+      containers:
+        - image: cch0124/spring-tutorial-api:9030de8-dirty-jib
+          name: tutorial-api
+          securityContext:
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+          resources:
+            requests:
+              memory: '256Mi'
+              cpu: '500m'
+            limits:
+              memory: '1024Mi'
+              cpu: '800'

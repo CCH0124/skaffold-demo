@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:  tutorial-api
+  labels:
+    app: tutorial-api
+    svc: tutorial-api-service
+spec:
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: tutorial-api
+  template:
+    metadata:
+      labels:
+        app: tutorial-api
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsNonRoot: true
+      containers:
+      - image: cch0124/spring-tutorial-api
+        name: tutorial-api
+        securityContext:
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+        resources:
+          requests:
+            memory: '256Mi'
+            cpu: '500m'
+          limits:
+            memory: '1024Mi'
+            cpu: '1'
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8080
+          initialDelaySeconds: 60 # 執行第一次請求等待 60 秒
+          timeoutSeconds: 3 # 超時後等待多少秒
+          failureThreshold: 5
+          periodSeconds: 20 # 請求周期
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8080
+          initialDelaySeconds: 60
+          timeoutSeconds: 3
+          periodSeconds: 20
+        lifecycle:
+          preStop: # 容器終止之前發送的事件
+            exec:
+              command: ["sh", "-c", "sleep 10"]
+        env:
+        - name: JAVA_TOOL_OPTIONS
+          value: "-Dspring.config.location=/opt/config/application.properties"
+        - name: DB_URL
+          valueFrom:
+            configMapKeyRef:
+              key: DB_URL
+              name: globalenv-cm
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              key: DB_USER
+              name: globalenv-secret
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: DB_PASSWORD
+              name: globalenv-secret
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+          name: spring-api
+        volumeMounts:
+        - name: application-config
+          mountPath: /opt/config
+          readOnly: true
+        imagePullPolicy: IfNotPresent
+      restartPolicy: Always
+      volumes:
+        - name: application-config
+          configMap:
+            name: tutorial-properties-cm
+            items:
+            - key: application.properties 
+              path: application.properties

@@ -1,0 +1,15 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name:  tutorial-api-service
+  labels:
+    app: tutorial-api
+spec:
+  selector:
+    app: tutorial-api
+  type: ClusterIP  # LoadBalancer | ClusterIP | NodePort
+  ports:
+  - name: api
+    port: 8080
+    targetPort:  8080
+    protocol: TCP
